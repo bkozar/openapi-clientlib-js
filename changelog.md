@@ -1,3 +1,22 @@
+### v8.1.2
+- Better setting of isNetworkError property when fetch fails due to excessive auth errors
+
+### v8.1.1
+- Signalr core - Fixes exception in IE11 if abortController polyfill is not provided
+- Signalr core - Add guard to avoid token renewal request before connection is established
+
+### v8.1.0
+- Allow `useCloud` option to be a function
+
+### v8.0.6
+- Revert rounding fix introduced in v8.0.5
+
+### v8.0.5
+- Fix rounding function that was sometimes inaccurate
+
+### v8.0.4
+- Propogate extended asset types header to batch requests
+
 ### v8.0.3
 - Signalr core - send last received message id while reconnecting
 

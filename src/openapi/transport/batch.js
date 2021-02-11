@@ -10,6 +10,7 @@ import { getRequestId } from '../../utils/request';
 import { formatUrl } from '../../utils/string';
 import { parse as parseBatch, build as buildBatch } from '../batch-util';
 import log from '../../log';
+import { shouldUseCloud } from './options';
 import TransportQueue from './queue';
 
 const reUrl = /((https?:)?\/\/)?[^/]+(.*)/i;
@@ -35,9 +36,14 @@ function emptyQueueIntoServiceGroups() {
 
 function batchCallFailure(callList, batchResponse) {
     const isAuthFailure = batchResponse && batchResponse.status === 401;
+    const isNetworkError =
+        !batchResponse ||
+        // Some responses same to be in error but not have isNetworkError defined
+        (typeof batchResponse.isNetworkError === 'boolean'
+            ? batchResponse.isNetworkError
+            : !batchResponse.status);
 
-    const logFunction =
-        isAuthFailure || batchResponse.isNetworkError ? log.debug : log.error;
+    const logFunction = isAuthFailure || isNetworkError ? log.debug : log.error;
     logFunction(LOG_AREA, 'Batch request failed', batchResponse);
 
     for (let i = 0; i < callList.length; i++) {
@@ -46,7 +52,7 @@ function batchCallFailure(callList, batchResponse) {
         callList[i].reject({
             message: 'batch failed',
             status: isAuthFailure ? 401 : undefined,
-            isNetworkError: batchResponse.isNetworkError,
+            isNetworkError,
         });
     }
 }
@@ -62,8 +68,9 @@ function getParentRequestId(batchResult) {
 }
 
 function batchCallSuccess(callList, batchResult) {
-    // not sure why this occurs, but logs indicate it does
+    // Previously occurred due to a bug in the auth transport
     if (!(batchResult && batchResult.response)) {
+        log.error('Received success call without response', batchResult);
         batchCallFailure(callList, batchResult);
         return;
     }
@@ -107,6 +114,7 @@ function runBatchCall(serviceGroup, callList) {
     const parentRequestId = getRequestId();
 
     const subRequests = [];
+    let subRequestHasExtendedAssetTypeHeader = false;
     for (let i = 0; i < callList.length; i++) {
         const call = callList[i];
         const headers = call.options && call.options.headers;
@@ -114,6 +122,11 @@ function runBatchCall(serviceGroup, callList) {
         if (typeof body !== 'string') {
             body = JSON.stringify(body);
         }
+
+        if (headers && headers['Pragma'] === 'oapi-x-extasset') {
+            subRequestHasExtendedAssetTypeHeader = true;
+        }
+
         subRequests.push({
             method: call.method,
             headers,
@@ -132,11 +145,16 @@ function runBatchCall(serviceGroup, callList) {
 
     const { body, boundary } = buildBatch(subRequests, this.host);
 
+    const headers = {
+        'Content-Type': 'multipart/mixed; boundary="' + boundary + '"',
+    };
+    if (subRequestHasExtendedAssetTypeHeader) {
+        headers.Pragma = 'oapi-x-extasset';
+    }
+
     this.transport
         .post(serviceGroup, 'batch', null, {
-            headers: {
-                'Content-Type': 'multipart/mixed; boundary="' + boundary + '"',
-            },
+            headers,
             body,
             cache: false,
             requestId: parentRequestId,
@@ -230,9 +248,7 @@ TransportBatch.prototype.addToQueue = function(item) {
  * @param item
  */
 TransportBatch.prototype.shouldQueue = function(item) {
-    const serviceOptions = this.services[item.servicePath] || {};
-
-    return !serviceOptions.useCloud;
+    return !shouldUseCloud(this.services[item.servicePath]);
 };
 
 /**
