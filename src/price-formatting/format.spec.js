@@ -23,7 +23,8 @@ describe('price-formatting format', () => {
         expect(priceFormatting.format(0, 1)).toEqual('0.0');
         expect(priceFormatting.format(0, 4)).toEqual('0.0000');
         expect(priceFormatting.format(0, 8)).toEqual('0.00000000');
-
+        
+        expect(priceFormatting.format(1.005, 2)).toEqual('1.01');
         expect(priceFormatting.format(1.23451, 2)).toEqual('1.23');
         expect(priceFormatting.format(-1.23451, 2)).toEqual('-1.23');
 
@@ -35,6 +36,9 @@ describe('price-formatting format', () => {
         );
         expect(priceFormatting.format(-1234567.23451, 4)).toEqual(
             '-1,234,567.2345',
+        );        
+        expect(priceFormatting.format(1991841981440.0645, 8)).toEqual(
+            '1,991,841,981,440.06450000',
         );
 
         expect(priceFormatting.format(5e-7, 7)).toEqual('0.0000005');
